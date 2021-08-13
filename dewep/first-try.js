@@ -1,34 +1,23 @@
+function dist (a, b) {
+    return Math.sqrt(Math.pow(a[0] - b[0], 2) + Math.pow(a[1] - b[1], 2))
+}
+
 (function () {
     const my_alive_spirits = my_spirits.filter(s => s.hp)
-    const isTop = base.position[0] === 1500
+    const isTop = base.position[0] === 1600
+    const energyStack = my_alive_spirits.length < 20 ? 0 : 3
 
     const missions = {
         base: [
             0,
-            my_alive_spirits.length > 25
-                ? 20
-                : 25
-        ],
-        defending: [
-            my_alive_spirits.length > 15
-                ? 10
-                : 0,
-            my_alive_spirits.length > 25
-                ? 20
-                : 25
+            29
         ],
         middle: [
-            my_alive_spirits.length > 25
-                ? 20
-                : 25,
-            my_alive_spirits.length > 35
-                ? 25
-                : 35
+            30,
+            45
         ],
         attacking: [
-            my_alive_spirits.length > 35
-                ? 30
-                : 35,
+            46,
             500
         ]
     }
@@ -38,8 +27,7 @@
         const spirit = my_alive_spirits[index]
 
         function smartMove (pos) {
-            const distance = Math.sqrt(Math.pow(spirit.position[0] - pos[0], 2) + Math.pow(spirit.position[1] - pos[1], 2))
-            if (distance > 200) {
+            if (dist(spirit.position, pos) > 200) {
                 spirit.move(pos)
             }
         }
@@ -52,18 +40,20 @@
             } else if (index >= missions.attacking[0] && index <= missions.attacking[1]) {
                 spirit.set_mark("attacking")
             }
-        } else if (spirit.energy == 0) {
+        } else if (spirit.energy == energyStack) {
             spirit.set_mark("harvesting")
         }
 
-        if (spirit.sight.enemies.length && spirit.energy > 25) {
-            spirit.move(spirits[spirit.sight.enemies[0]].position)
-            spirit.energize(spirits[spirit.sight.enemies[0]])
+        if (spirit.sight.enemies.length && spirit.energy > 0) {
+            const enemies = spirit.sight.enemies.map(id => spirits[id])
+            enemies.sort((a, b) => dist(a.position, spirit.position) - dist(b.position, spirit.position))
+            spirit.move(enemies[0].position)
+            spirit.energize(enemies[0])
             continue
         }
 
         if (spirit.mark == "harvesting") {
-            if (index > 20) {
+            if (index > 30) {
                 smartMove(star_p89.position)
             } else if (isTop) {
                 smartMove(star_zxq.position)
