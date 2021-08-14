@@ -30,12 +30,18 @@ memory.enemyEnergy = memory.aliveEnemies.reduce((acc, curr) => { acc += +curr.en
 memory.totalEnemyCapacity = memory.aliveEnemies.reduce((acc, curr) => { acc += +curr.energy_capacity; return acc }, 0)
 memory.totalOwnCapacity = memory.aliveOwn.reduce((acc, curr) => { acc += +curr.energy_capacity; return acc }, 0)
 
-cleanupDeaths()
-mergeNoobs()
 
-allocateHarvesters()
-assignUnemployed()
-harvesterWork()
+if (shouldAttack()) {
+  attack()
+} else {
+  cleanupDeaths()
+  mergeNoobs()
+  
+  allocateHarvesters()
+  assignUnemployed()
+  harvesterWork()
+}
+
 attackInRange()
 
 /**
@@ -102,15 +108,16 @@ function allocateHarvesters () {
   const harvesters = memory.canWork.map(spirit => spirit.id)
 
   for (const spirit of harvesters) {
-    if (memory.harvester[memory.ownStar].workers.length < 4 ||
-        memory.harvester[memory.ownStar].workers.length < memory.harvester.star_p89.workers.length ||
-        memory.harvester[memory.ownStar].workers.length % 4 !== 0) {
-      memory.harvester[memory.ownStar].workers.push(spirit)
-    } else if (memory.harvester.star_p89.workers.length % 4 !== 0 || memory.harvester.star_p89.workers.length < 12) {
-      memory.harvester.star_p89.workers.push(spirit)
-    } else {
-      memory.harvester[memory.ownStar].workers.push(spirit)
-    }
+      memory.harvester[memory.enemyStar].workers.push(spirit)
+    //   if (memory.harvester[memory.ownStar].workers.length < 4 ||
+    //     memory.harvester[memory.ownStar].workers.length < memory.harvester.star_p89.workers.length ||
+    //     memory.harvester[memory.ownStar].workers.length % 4 !== 0) {
+    //   memory.harvester[memory.ownStar].workers.push(spirit)
+    // } else if (memory.harvester.star_p89.workers.length % 4 !== 0 || memory.harvester.star_p89.workers.length < 12) {
+    //   memory.harvester.star_p89.workers.push(spirit)
+    // } else {
+    //   memory.harvester[memory.ownStar].workers.push(spirit)
+    // }
   }
   if (true) {
   }
@@ -253,6 +260,79 @@ function mergeNoobs () {
 }
 
 // SECTION: Attack section
+function attack() {
+  if (!memory.hasSplit) {
+    for (let i = 0; i < memory.aliveOwn.filter(spirit => spirit.size !== 1).length; i++) {
+      const spirit = memory.aliveOwn.filter(spirit => spirit.size !== 1)[i]
+  
+      spirit.divide()
+    }
+    memory.hasSplit = true
+    delete memory.mergeWith
+    return
+  }
+
+  if (!memory.mergeWith) {
+    memory.mergeWith = {}
+    for (let i = 0; i < memory.aliveOwn.length; i++) {
+      const spirit = memory.aliveOwn[i]
+
+      if (i % 5 !== 0) {
+        memory.mergeWith[spirit.id] = memory.aliveOwn[i - i % 5].id
+      }
+    }
+  } else if (someLeftToMerge()) {
+    for (let i = 0; i < memory.aliveOwn.length; i++) {
+      const spirit = memory.aliveOwn[i]
+
+      function smartMove (pos) {
+        const distance = Math.sqrt(Math.pow(spirit.position[0] - pos[0], 2) + Math.pow(spirit.position[1] - pos[1], 2))
+        if (distance > 150) {
+          spirit.move(pos)
+        }
+      }
+      if (memory.mergeWith[spirit.id]) {
+        spirit.move(spirits[memory.mergeWith[spirit.id]].position)
+        spirit.merge(spirits[memory.mergeWith[spirit.id]])
+        spirit.shout(`M ${spirit.id}`)
+      } else {
+        smartMove(star_p89.position)
+        spirit.energize(spirit)
+      }
+    }
+  } else if (!memory.isAttacking && !hasFullEnergy()) {
+    for (let i = 0; i < memory.aliveOwn.length; i++) {
+      const spirit = memory.aliveOwn[i]
+      spirit.move(memory.stars.star_p89.position)
+      spirit.energize(spirit)
+    }
+  } else {
+    memory.isAttacking = true
+  }
+
+  if (memory.isAttacking) {
+    for (let i = 0; i < memory.aliveOwn.length; i++) {
+      const spirit = memory.aliveOwn[i]
+      spirit.move(enemy_base.position)
+    }
+  }
+}
+
+function shouldAttack () {
+  const totalEnemyCapacity = memory.aliveEnemies.reduce((acc, curr) => { acc += +curr.energy_capacity; return acc }, 0)
+  const totalOwnCapacity = memory.aliveOwn.reduce((acc, curr) => { acc += +curr.energy_capacity; return acc }, 0)
+
+  return totalOwnCapacity - totalEnemyCapacity > 200 || memory.hasSplit
+}
+
+function someLeftToMerge() {
+  return memory.aliveOwn.some(spirit => memory.mergeWith[spirit.id])
+}
+
+function hasFullEnergy() {
+  return !memory.aliveOwn.some(spirit => spirit.energy !== spirit.energy_capacity)
+}
+
 function getEnemiesInRange(spirit) {
   const inSight = spirit.sight.enemies.map(name => spirits[name])
 
