@@ -9,7 +9,7 @@ if (!memory.stars) {
   initHarvesterMemory()
 }
 
-memory.keepEnergyOnSpawn = 5
+memory.keepEnergyOnSpawn = tick < 200 ? 0 : tick < 400 ? 4 : 8
 memory.attacked = []
 
 memory.ownBase = base.position[0] < 2000 ? 'star_zxq' : 'star_a1c'
@@ -25,7 +25,7 @@ memory.aliveEnemies = Object.keys(spirits).filter(name => !name.includes('ArGJol
 memory.canWork = memory.aliveOwn.filter(spirit => (spirit.size + (memory.incomingMerge[spirit.id] || 0) >= 2) && !Object.keys(memory.harvester).some(star => memory.harvester[star].workers.includes(spirit.id)))
 
 memory.ownEnergy = memory.aliveOwn.reduce((acc, curr) => { acc += +curr.energy; return acc }, 0)
-memory.enemyEnergy = Object.keys(spirits).reduce((acc, curr) => { if (!curr.includes('ArGJolan')) { acc += +spirits[curr].energy } return acc }, 0)
+memory.enemyEnergy = memory.aliveEnemies.reduce((acc, curr) => { acc += +curr.energy; return acc }, 0)
 
 memory.totalEnemyCapacity = memory.aliveEnemies.reduce((acc, curr) => { acc += +curr.energy_capacity; return acc }, 0)
 memory.totalOwnCapacity = memory.aliveOwn.reduce((acc, curr) => { acc += +curr.energy_capacity; return acc }, 0)
@@ -109,7 +109,7 @@ function allocateHarvesters () {
     } else if (memory.harvester.star_p89.workers.length % 4 !== 0 || memory.harvester.star_p89.workers.length < 12) {
       memory.harvester.star_p89.workers.push(spirit)
     } else {
-      memory.harvester[memory.enemyStar].workers.push(spirit)
+      memory.harvester[memory.ownStar].workers.push(spirit)
     }
   }
   if (true) {
@@ -136,12 +136,8 @@ function harvesterColonyWork (star, supplyGroups) {
 
       moveTo(spirit, position)
       spirit.energize(base)
-      spirit.shout(`Mv ${supplyGroups.length} ${position.map(pos => Math.floor(pos))}`)
-    } else if (!spirit.mark || (tick < 200 && spirit.energy === 0) || (tick > 200 && spirit.energy < spirit.energy_capacity * 0.2) || (tick > 400 && spirit.energy < spirit.energy_capacity * 0.5) || (tick > 800 && spirit.energy < spirit.energy_capacity * 0.8)) {
-      spirit.shout(`HLLO (${spirit.mark})`)
+    } else if (!spirit.mark || spirit.energy < spirit.energy_capacity * 0.8) {
       spirit.set_mark("h")
-    } else {
-      spirit.shout(`E ${tick < 200 && spirit.energy === 0} ${tick > 800 && spirit.energy < spirit.energy_capacity * 0.8}`)
     }
 
 
@@ -151,20 +147,16 @@ function harvesterColonyWork (star, supplyGroups) {
 
     if (spirit.mark === "h") {
       const position = getStepPosition(star.position, 1, supplyGroups.length)
-      spirit.shout(`${spirit.mark} ${position.map(pos => Math.floor(pos)).join(',')}`)
 
       moveTo(spirit, position)
       if (star.energy > tick * 1.5 || star.energy >= 0.95 * star.energy_capacity || memory.underattack || star.id === memory.enemyStar) {
-        spirit.shout(`${star.id === memory.enemyStar} ${memory.ownStar}`)
         spirit.energize(spirit)
       } else {
         spirit.set_mark("c")
-        spirit.shout(`NH ${star.energy > tick * 2} ${star.energy >= 0.95 * star.energy_capacity}`)
       }
     }
-    if (spirit.mark === "c") {
+    if (spirit.mark === "c" && spirit.energy >= spirit.energy_capacity * 0.8) {
       const targetNode = findTargetNode(supplyGroups, 1, Math.floor(harvesterId / 2))
-      // spirit.shout(`${spirit.mark}zzz ${targetNode.position.map(pos => Math.floor(pos)).join(',')}`)
       energizeMove(spirit, targetNode.position)
       spirit.energize(targetNode)
     }
@@ -179,7 +171,7 @@ function harvesterColonyWork (star, supplyGroups) {
 
       const targetNode = findTargetNode(supplyGroups, groupId + 1, nodeIndex)
 
-      if ((tick < 200 && node.energy) || (tick < 500 && node.energy > node.energy_capacity / 2) || (tick < 1000 && node.energy > node.energy_capacity * 0.7) || node.energy > node.energy_capacity * 0.9) {
+      if (node.energy > node.energy_capacity * 0.8) {
         energizeMove(node, targetNode.position)
         node.energize(targetNode)
       } else {
@@ -282,7 +274,7 @@ function attackInRange() {
         spirit.energize(enemy)
         memory.attacked.push(enemy.id)
         hasAttacked = true
-        spirit.shout(`ATTAC ${enemy.id}`)
+        spirit.shout(`⚡️`)
         break
       }
     }
