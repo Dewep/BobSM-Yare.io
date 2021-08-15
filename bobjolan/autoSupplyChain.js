@@ -7,6 +7,14 @@ if (!memory.stars) {
   memory.working = {}
 
   initHarvesterMemory()
+
+  memory.defenders = {
+    star_a1c: [],
+    star_p89: [],
+    star_zxq: [],
+    outpost: [],
+    base_ArGJolan: [],
+  }
 }
 
 if (!memory.previousEnergy) {
@@ -15,7 +23,7 @@ if (!memory.previousEnergy) {
 
 
 
-memory.keepEnergyOnSpawn = tick < 200 ? 0 : tick < 400 ? 4 : 8
+memory.keepEnergyOnSpawn = tick < 200 ? 0 : 10
 
 memory.ownBase = base.position[0] < 2000 ? 'star_zxq' : 'star_a1c'
 memory.ownStar = base.position[0] < 2000 ? 'star_zxq' : 'star_a1c'
@@ -43,9 +51,11 @@ if (shouldAttack()) {
   cleanupDeaths()
   mergeNoobs()
   
+  allocateDefenders()
   allocateHarvesters()
   assignUnemployed()
   harvesterWork()
+  defenderWork()
 }
 
 attackInRange()
@@ -94,6 +104,10 @@ function cleanupDeaths () {
       memory.harvester[star].groups[i] = memory.harvester[star].groups[i].filter(spirit => spirits[spirit].hp)
     }
   })
+
+  Object.keys(memory.defenders).forEach(entity => {
+    memory.defenders[entity] = memory.defenders[entity].filter(spirit => spirits[spirit].hp)
+  })
 }
 
 
@@ -114,7 +128,7 @@ function energizeMove (spirit, pos) {
 
 // SECTION: Harvesting & supply chain
 function allocateHarvesters () {
-  const harvesters = memory.canWork.map(spirit => spirit.id)
+  const harvesters = memory.canWork.filter(worker => !memory.working[worker.id]).map(spirit => spirit.id)
 
   for (const spirit of harvesters) {
     if (tick > 200) {
@@ -133,10 +147,10 @@ function allocateHarvesters () {
   }
 }
 
-function getStepPosition (starPosition, step, totalSteps) {
+function getStepPosition (starPosition, step, totalSteps, from = base) {
   return [
-    starPosition[0] - step * (starPosition[0] - base.position[0]) / (totalSteps + 1),
-    starPosition[1] - step * (starPosition[1] - base.position[1]) / (totalSteps + 1),
+    starPosition[0] - step * (starPosition[0] - from.position[0]) / (totalSteps + 1),
+    starPosition[1] - step * (starPosition[1] - from.position[1]) / (totalSteps + 1),
   ]
 }
 
@@ -192,6 +206,8 @@ function harvesterColonyWork (star, supplyGroups) {
       if (node.energy > node.energy_capacity * 0.6) {
         energizeMove(node, targetNode.position)
         node.energize(targetNode)
+      } else if (node.energy < node.energy_capacity * 0.4) {
+        help(node, node.energy_capacity * 0.4 - node.energy)
       } else {
         const position = getStepPosition(star.position, groupId + 1, supplyGroups.length)
         moveTo(node, position)
@@ -282,13 +298,43 @@ function mergeNoobs () {
 }
 
 // SECTION: Defense section
+function help (spirit, amount) {
+  spirit.shout(`🔁 ${amount}`)
+  memory.needsHelp[spirit.id] = amount
+}
+
+function allocateDefenders () {
+  const supplyChainSize = memory.harvester[memory.ownStar].groups[memory.harvester.star_p89.groups.length - 1].length
+
+  const canWork = memory.canWork.filter(worker => !memory.working[worker.id]).map(spirit => spirit.id)
+  while (memory.defenders[memory.ownBase].length < supplyChainSize && canWork.length) {
+    const defender = canWork.shift()
+    memory.defenders[memory.ownBase].push(defender)
+    memory.working[defender] = true
+  }
+}
+
+function defenderWork () {
+  for (const i of memory.defenders[memory.ownBase]) {
+    const defender = spirits[i]
+    const definedPos = getStepPosition(getStepPosition(stars[memory.ownStar].position, 2, 3, star_p89), 4, 5)
+    defender.shout(`🐘 ${definedPos.map(item => Math.floor(item)).join(',')}`)
+
+    
+    moveTo(defender, definedPos)
+    if (defender.energy < defender.energy_capacity) {
+      help(defender, defender.energy_capacity - defender.energy)
+    }
+  }
+}
+
 function askForHelp () {
   memory.needsHelp = {}
   for (let i = 0; i < memory.aliveOwn.length; i++) {
     const spirit = memory.aliveOwn[i]
 
     if (memory.previousEnergy[spirit.id] && memory.previousEnergy[spirit.id] - spirit.size > spirit.energy) {
-      memory.needsHelp[spirit.id] = spirit.energy_capacity - spirit.energy
+      help(spirit, spirit.energy_capacity - spirit.energy)
     }
 
     memory.previousEnergy[spirit.id] = spirit.energy
@@ -296,7 +342,7 @@ function askForHelp () {
 }
 
 function helpInRange() {
-  for (let round = 0; round < 4; round++) {
+  for (let round = 0; round < 10; round++) {
     const needsHelp = Object.keys(memory.needsHelp)
     for (const helper of memory.aliveOwn.filter(spirit => undefined === memory.needsHelp[spirit.id])) {
       for (const helpedId of needsHelp) {
@@ -305,7 +351,7 @@ function helpInRange() {
         if (getDistance(helper.position, helped.position) < 200 && memory.needsHelp[helpedId] > 0) {
           helper.energize(helped)
           memory.needsHelp[helpedId] -= helper.size
-          memory.needsHelp[helper.id] = helper.energy_capacity - (helper.energy - helper.size)
+          help(helper, helper.energy_capacity - (helper.energy - helper.size))
           helper.shout(`${round} 💪🏻 ${helpedId}`)
           break
         }
@@ -364,36 +410,40 @@ function attack() {
     return
   }
 
-  // if (!memory.mergeWith) {
-  //   memory.mergeWith = {}
-  //   for (let i = 0; i < memory.aliveOwn.length; i++) {
-  //     const spirit = memory.aliveOwn[i]
+  if (!memory.mergeWith) {
+    console.log(1)
+    memory.mergeWith = {}
+    for (let i = 0; i < memory.aliveOwn.length; i++) {
+      const spirit = memory.aliveOwn[i]
 
-  //     if (i % 5 !== 0) {
-  //       memory.mergeWith[spirit.id] = memory.aliveOwn[i - i % 5].id
-  //     }
-  //   }
-  // } else if (someLeftToMerge()) {
-  //   for (let i = 0; i < memory.aliveOwn.length; i++) {
-  //     const spirit = memory.aliveOwn[i]
+      if (i % 5 !== 0 && spirit.id !== memory.aliveOwn[i - i % 5].id) {
+        memory.mergeWith[spirit.id] = memory.aliveOwn[i - i % 5].id
+      }
+    }
+  } else if (someLeftToMerge()) {
+    const hasToMerge = memory.aliveOwn.find(spirit => memory.mergeWith[spirit.id] && spirits[spirit.id].hp)
+    console.log(2, 'HASTOMERGE', JSON.stringify(hasToMerge), 'WITH', JSON.stringify(spirits[hasToMerge.id]))
+    for (let i = 0; i < memory.aliveOwn.length; i++) {
+      const spirit = memory.aliveOwn[i]
 
-  //     function smartMove (pos) {
-  //       const distance = getDistance(spirit.position, pos)
-  //       if (distance > 150) {
-  //         spirit.move(pos)
-  //       }
-  //     }
-  //     if (memory.mergeWith[spirit.id]) {
-  //       spirit.move(spirits[memory.mergeWith[spirit.id]].position)
-  //       spirit.merge(spirits[memory.mergeWith[spirit.id]])
-  //       spirit.shout(`M ${spirit.id}`)
-  //     } else {
-  //       smartMove(star_p89.position)
-  //       spirit.energize(spirit)
-  //     }
-  //   }
-  // } else
-  if (!memory.isAttacking && !hasFullEnergy()) {
+      function smartMove (pos) {
+        const distance = getDistance(spirit.position, pos)
+        if (distance > 150) {
+          spirit.move(pos)
+        }
+      }
+      if (memory.mergeWith[spirit.id]) {
+        spirit.move(spirits[memory.mergeWith[spirit.id]].position)
+        spirit.merge(spirits[memory.mergeWith[spirit.id]])
+        spirit.shout(`M ${spirit.id}`)
+      } else {
+        
+        smartMove(star_p89.position)
+        spirit.energize(spirit)
+      }
+    }
+  } else if (!memory.isAttacking && !hasFullEnergy()) {
+    console.log(3)
     for (let i = 0; i < memory.aliveOwn.length; i++) {
       const spirit = memory.aliveOwn[i]
       spirit.move(memory.stars.star_p89.position)
@@ -403,6 +453,7 @@ function attack() {
     memory.isAttacking = true
   }
 
+  console.log('WEEEE', memory.isAttacking)
   if (memory.isAttacking) {
     for (let i = 0; i < memory.aliveOwn.length; i++) {
       const spirit = memory.aliveOwn[i]
@@ -419,7 +470,7 @@ function shouldAttack () {
 }
 
 function someLeftToMerge() {
-  return memory.aliveOwn.some(spirit => memory.mergeWith[spirit.id])
+  return memory.aliveOwn.some(spirit => memory.mergeWith[spirit.id] && spirits[spirit.id].hp)
 }
 
 function hasFullEnergy() {
@@ -448,7 +499,7 @@ function attackInRange() {
         spirit.energize(enemy)
         enemy.energy -= spirit.energy
         hasAttacked = true
-        memory.needsHelp[spirit.id] = spirit.energy_capacity - (spirit.energy - spirit.size)
+        help(spirit, spirit.energy_capacity - (spirit.energy - spirit.size))
         spirit.shout(`⚡️ needs ${memory.needsHelp[spirit.id]}`)
         break
       }
@@ -456,7 +507,8 @@ function attackInRange() {
 
     if (!hasAttacked && memory.isAttacking) {
       spirit.energize(enemy_base)
-      memory.needsHelp[spirit.id] = spirit.energy_capacity - (spirit.energy - spirit.size)
+      spirit.shout(`⚡️ needs ${memory.needsHelp[spirit.id]}`)
+      help(spirit, spirit.energy_capacity - (spirit.energy - spirit.size))
     }
   }
 }
@@ -473,3 +525,5 @@ if (memory.harvester[memory.ownStar].workers.length < 4 || tick < 100 ||
 }
 // console.log(`Energy: ${memory.ownEnergy}v${memory.enemyEnergy}`)
 // console.log(`Strength: ${memory.totalOwnCapacity}v${memory.totalEnemyCapacity}`)
+// console.log('HARVESTER:', JSON.stringify(memory.harvester, null, 2))
+// console.log('DEFENDERS:', JSON.stringify(memory.defenders, null, 2))
