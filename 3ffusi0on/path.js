@@ -1,4 +1,5 @@
 function getSafePointAround(obj, r, from, to) {
+    r += r * 0.1
     xA = obj[0]; yA = obj[1]
     xB = from[0]; yB = from[1]
     
@@ -21,7 +22,7 @@ function getSafePointAround(obj, r, from, to) {
         y2 = Math.round(yA + b/2 - tmp);
     }
 
-    if (dist(to, [x1, y1]) > dist(to, [x2, y2]))
+    if (dist(to, [x1, y1]) < dist(to, [x2, y2]))
         return [x1, y1];
     return [x2, y2]
 }
