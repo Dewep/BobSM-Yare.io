@@ -9,6 +9,11 @@ function getSafePointAround(obj, r, from, to) {
     const c = (xB - xA) * (xB - xA) + (yB - yA) * (yB - yA) - R*R + r*r;
     const delta = (2*a*c)*(2*a*c) - 4 *(a*a + b*b) * (c*c - (b*b*r*r));
 
+    // No hit, safe passage
+    if (delta < 0) {
+        return to;
+    }
+
     const x1 = Math.round(xA + (2*a*c - Math.sqrt(delta)) / (2*(a*a+b*b)));
     const x2 = Math.round(xA + (2*a*c + Math.sqrt(delta)) / (2*(a*a+b*b)));
 
