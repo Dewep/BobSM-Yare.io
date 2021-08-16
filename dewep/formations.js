@@ -228,11 +228,13 @@ function getSafePointAround(obj, r, from, to) {
   //   return to
   // }
 
-  r += r * 0.1
   xA = obj[0]; yA = obj[1]
   xB = from[0]; yB = from[1]
   
   const R = Math.sqrt(Math.pow(dist(from, obj), 2) + r*r)
+  if (Math.floor(R) <= r) {
+    return to;
+  }
   const a = 2 * (xB - xA)
   const b = 2 * (yB - yA)
   const c = (xB - xA) * (xB - xA) + (yB - yA) * (yB - yA) - R*R + r*r
