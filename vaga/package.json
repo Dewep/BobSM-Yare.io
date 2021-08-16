@@ -1,0 +1,16 @@
+{
+  "name": "vaga-bot",
+  "version": "1.0.0",
+  "description": "Vaga bot for Yare.io",
+  "main": "src/index.js",
+  "author": "Vaga",
+  "license": "MIT",
+  "scripts": {
+      "dev": "node cli.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.12.20",
+    "node-watch": "^0.7.1",
+    "yare-sync": "^2.0.0"
+  }
+}
