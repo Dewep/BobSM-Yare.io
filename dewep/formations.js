@@ -57,7 +57,7 @@
       { id: 'attacker0', size: 3, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: getChainPosition(star_p89.position, 1, 3) }
     ],
     attackFromBehind: [
-      { id: 'attackerBehind0', size: 1, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: [myStar.position[0] - sideModifier * 20, sideModifier * 50 + myStar.position[1]], avoidArea: [...outpost.position, 900] }
+      { id: 'attackerBehind0', size: 1, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: [myStar.position[0] - sideModifier * 20, sideModifier * 50 + myStar.position[1]], avoidArea: [...outpost.position, 750] }
     ],
     baiter: [
       { id: 'baiter0', size: 1, pos: enemy_base.position, type: 'baiter', energyPos: [myStar.position[0] - sideModifier * 20, sideModifier * 50 + myStar.position[1]] }
@@ -169,10 +169,13 @@
       move(spirit, [memory.board_x, memory.board_y], 0, null)
       if (spirit.sight.structures.filter(s => s.startsWith('star_')).length || spirit.sight.structures.includes(base.id)) {
         energize(spirit, spirit, true)
+      } else {
+        energize(spirit, enemy_base, false)
       }
     } else if (worker.type === 'baiter') {
-      enemies.sort((a, b) => a.spirit.dist - b.spirit.dist)
-      const baiterAvoidArea = enemies.length ? [...enemies[0].spirit.position, 350] : (worker.avoidArea || avoidArea)
+      const enemiesBaiter = enemies.filter(e => e.dist < 300)
+      enemiesBaiter.sort((a, b) => a.dist - b.dist)
+      const baiterAvoidArea = enemiesBaiter.length ? [...enemiesBaiter[0].spirit.position, 220] : (worker.avoidArea || avoidArea)
       if (spirit.energy_rate < 0.3) {
         spirit.set_mark('reload')
       } else if (spirit.energy_rate === 1) {
@@ -184,7 +187,11 @@
           energize(spirit, spirit, true)
         }
       } else {
-        move(spirit, enemies.length >= 5 ? (isTopSide ? [4200, 2400] : [0, 0]) : aliveEnemies.length ? aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)].position : enemy_base.position, 0, baiterAvoidArea)
+        if (enemiesBaiter.length >= 5) {
+          move(spirit, (isTopSide ? [3200, 0] : [0, 0]), 0, baiterAvoidArea)
+        } else {
+          move(spirit, aliveEnemies.length ? aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)].position : enemy_base.position, 0, baiterAvoidArea)
+        }
       }
     }
 
@@ -224,38 +231,69 @@ function getSafePointAround(obj, r, from, to) {
   if (!checkcirclelinecollide(obj[0], obj[1], r, from[0], from[1], to[0], to[1])) {
     return to
   }
-  // if ( (from[0] - obj[0])*(from[0] - obj[0]) + (from[1] - obj[1])*(from[1] - obj[1]) < r*r) {
-  //   return to
-  // }
 
-  xA = obj[0]; yA = obj[1]
-  xB = from[0]; yB = from[1]
+  const distFrom = Math.sqrt(Math.pow(dist(from, obj), 2) - r*r)
+  if (isNaN(distFrom)) {
+    return to
+  }
+  const [x1, y1] = intersectTwoCircles(obj[0], obj[1], r, from[0], from[1], distFrom, to)
   
-  const R = Math.sqrt(Math.pow(dist(from, obj), 2) + r*r)
-  if (Math.floor(R) <= r) {
-    return to;
+  const distTo = Math.sqrt(Math.pow(dist(to, obj), 2) - r*r)
+  if (isNaN(distTo)) {
+    return to
   }
-  const a = 2 * (xB - xA)
-  const b = 2 * (yB - yA)
-  const c = (xB - xA) * (xB - xA) + (yB - yA) * (yB - yA) - R*R + r*r
-  const delta = (2*a*c)*(2*a*c) - 4 *(a*a + b*b) * (c*c - (b*b*r*r))
+  const [x2, y2] = intersectTwoCircles(obj[0], obj[1], r, to[0], to[1], distTo, from)
 
-  const x1 = Math.round(xA + (2*a*c - Math.sqrt(delta)) / (2*(a*a+b*b)))
-  const x2 = Math.round(xA + (2*a*c + Math.sqrt(delta)) / (2*(a*a+b*b)))
+  return lineIntersect(from[0], from[1], x1, y1, to[0], to[1], x2, y2)
+}
 
-  let y1, y2;
-  if (b != 0) {
-    y1 = Math.round(yA + (c-a * (x1 - xA)) / b)
-    y2 = Math.round(yA + (c-a * (x2 - xA)) / b)
-  } else {
-    const tmp = Math.sqrt(R*R - Math.pow(((2*c - a*a)/(2*a))))
-    y1 = Math.round(yA + b/2 + tmp)
-    y2 = Math.round(yA + b/2 - tmp)
+function lineIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+  // Check if none of the lines are of length 0
+  if ((x1 === x2 && y1 === y2) || (x3 === x4 && y3 === y4)) {
+    return [x2, y2]
   }
+  const denominator = ((y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1))
+  // Lines are parallel
+  if (denominator === 0) {
+    return [x2, y2]
+  }
+  const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denominator
+  const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denominator
+  // Return an array with the x and y coordinates of the intersection
+  const x = x1 + ua * (x2 - x1)
+  const y = y1 + ua * (y2 - y1)
+  return [x, y]
+}
 
-  if (dist(to, [x1, y1]) < dist(to, [x2, y2]))
-    return [x1, y1]
-  return [x2, y2]
+function intersectTwoCircles (x1, y1, r1, x2, y2, r2, compareWith) {
+  var centerdx = x1 - x2;
+  var centerdy = y1 - y2;
+  var R = Math.sqrt(centerdx * centerdx + centerdy * centerdy);
+  if (!(Math.abs(r1 - r2) <= R && R <= r1 + r2)) { // no intersection
+    return []; // empty list of results
+  }
+  // intersection(s) should exist
+
+  var R2 = R*R;
+  var R4 = R2*R2;
+  var a = (r1*r1 - r2*r2) / (2 * R2);
+  var r2r2 = (r1*r1 - r2*r2);
+  var c = Math.sqrt(2 * (r1*r1 + r2*r2) / R2 - (r2r2 * r2r2) / R4 - 1);
+
+  var fx = (x1+x2) / 2 + a * (x2 - x1);
+  var gx = c * (y2 - y1) / 2;
+  var ix1 = fx + gx;
+  var ix2 = fx - gx;
+
+  var fy = (y1+y2) / 2 + a * (y2 - y1);
+  var gy = c * (x1 - x2) / 2;
+  var iy1 = fy + gy;
+  var iy2 = fy - gy;
+
+  if (dist(compareWith, [ix1, iy1]) < dist(compareWith, [ix2, iy2])) {
+    return [ix1, iy1]
+  }
+  return [ix2, iy2]
 }
 
 function checkcirclelinecollide (x, y, radius, x1, y1, x2, y2) {
