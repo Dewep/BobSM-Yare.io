@@ -1,27 +1,30 @@
+memory.jobTypes = [
+  'harvester',
+  'defender',
+]
+
 if (!memory.stars) {
   memory.stars = {
     star_a1c,
     star_p89,
-    star_zxq
+    star_zxq,
   }
   memory.working = {}
 
   initHarvesterMemory()
 
-  memory.defenders = {
-    star_a1c: [],
-    star_p89: [],
-    star_zxq: [],
-    outpost: [],
-    base_ArGJolan: [],
+  memory.defender = {
+    star_a1c: { workers: [] },
+    star_p89: { workers: [] },
+    star_zxq: { workers: [] },
+    outpost: { workers: [] },
+    base_ArGJolan: { workers: [] },
   }
 }
 
 if (!memory.previousEnergy) {
   memory.previousEnergy = {}
 }
-
-
 
 memory.keepEnergyOnSpawn = tick < 200 ? 0 : 10
 
@@ -43,17 +46,20 @@ memory.enemyEnergy = memory.aliveEnemies.reduce((acc, curr) => { acc += +curr.en
 memory.totalEnemyCapacity = memory.aliveEnemies.reduce((acc, curr) => { acc += +curr.energy_capacity; return acc }, 0)
 memory.totalOwnCapacity = memory.aliveOwn.reduce((acc, curr) => { acc += +curr.energy_capacity; return acc }, 0)
 
+memory.formation = [
+  { type: 'harvester', target: memory.ownStar, quantity: 4 },
+  { type: 'defender', target: memory.ownBaseDefense, quantity: 1 },
+  { type: 'harvester', target: star_p89.id, quantity: 4 },
+]
 
+cleanupDeaths()
 askForHelp()
 if (shouldAttack()) {
   attack()
 } else {
-  cleanupDeaths()
   mergeNoobs()
-  
-  allocateDefenders()
-  allocateHarvesters()
-  assignUnemployed()
+
+  applyFormation()
   harvesterWork()
   defenderWork()
 }
@@ -64,22 +70,61 @@ storeEnemyPositions()
 helpInRange()
 
 /**
- * 
- * 
- * 
- * 
- * 
- * 
+ *
+ *
  * LIB
- * 
- * 
- * 
- * 
- * 
- * 
- * 
- * 
+ *
+ *
  */
+
+// SECTION: formation
+function getCurrentWorkers () {
+  const currentWorkers = {}
+  for (const jobType of memory.jobTypes) {
+    currentWorkers[jobType] = {}
+
+    for (const target of Object.keys(memory[jobType])) {
+      currentWorkers[jobType][target] = memory[jobType][target].workers.length
+    }
+  }
+
+  return currentWorkers
+}
+
+function getLackingJob (workersList) {
+  for (const type of Object.keys(workersList)) {
+    for (const target of Object.keys(workersList[type])) {
+      if (workersList[type][target] < 0) {
+        return { type, target }
+      }
+    }
+  }
+  return null
+}
+
+function findLackingSquad () {
+  const workersList = getCurrentWorkers()
+
+  while (true) {
+    for (const squad of memory.formation) {
+      workersList[squad.type][squad.target] -= squad.quantity
+
+      if (getLackingJob(workersList)) {
+        return squad
+      }
+    }
+  }
+}
+
+function applyFormation () {
+  const workers = memory.canWork.filter(worker => !memory.working[worker.id]).map(spirit => spirit.id)
+
+  for (const worker of workers) {
+    const allocatedSquad = findLackingSquad()
+
+    memory[allocatedSquad.type][allocatedSquad.target].workers.push(worker)
+  }
+}
 
 // SECTION: system
 function initHarvesterMemory () {
@@ -92,7 +137,7 @@ function initHarvesterMemory () {
 
     memory.harvester[starName] = {
       workers: [],
-      groups
+      groups,
     }
   })
 }
@@ -105,13 +150,19 @@ function cleanupDeaths () {
     }
   })
 
-  Object.keys(memory.defenders).forEach(entity => {
-    memory.defenders[entity] = memory.defenders[entity].filter(spirit => spirits[spirit].hp)
+  Object.keys(memory.defender).forEach(entity => {
+    memory.defender[entity].workers = memory.defender[entity].workers.filter(spirit => spirits[spirit].hp)
   })
 }
 
-
 // SECTION: Movements
+function smartMove (spirit, pos) {
+  const distance = getDistance(spirit.position, pos)
+  if (distance > 150) {
+    spirit.move(pos)
+  }
+}
+
 function moveTo (spirit, pos) {
   const distance = getDistance(spirit.position, pos)
   if (distance > 1) {
@@ -127,26 +178,6 @@ function energizeMove (spirit, pos) {
 }
 
 // SECTION: Harvesting & supply chain
-function allocateHarvesters () {
-  const harvesters = memory.canWork.filter(worker => !memory.working[worker.id]).map(spirit => spirit.id)
-
-  for (const spirit of harvesters) {
-    if (tick > 200) {
-      memory.harvester.star_p89.workers.push(spirit)
-      continue
-    }
-    if ((outpost.control && outpost.control !== 'ArGJolan') || tick < 120 || memory.harvester[memory.ownStar].workers.length < 4 ||
-        memory.harvester[memory.ownStar].workers.length < memory.harvester.star_p89.workers.length ||
-        memory.harvester[memory.ownStar].workers.length % 4 !== 0) {
-      memory.harvester[memory.ownStar].workers.push(spirit)
-    } else if (memory.harvester.star_p89.workers.length % 4 !== 0 || memory.harvester.star_p89.workers.length < 20) {
-      memory.harvester.star_p89.workers.push(spirit)
-    } else {
-      memory.harvester[memory.enemyStar].workers.push(spirit)
-    }
-  }
-}
-
 function getStepPosition (starPosition, step, totalSteps, from = base) {
   return [
     starPosition[0] - step * (starPosition[0] - from.position[0]) / (totalSteps + 1),
@@ -168,15 +199,14 @@ function harvesterColonyWork (star, supplyGroups) {
       moveTo(spirit, position)
       spirit.energize(base)
     } else if (!spirit.mark || spirit.energy < spirit.energy_capacity * 0.8) {
-      spirit.set_mark("h")
+      spirit.set_mark('h')
     }
 
-
-    if (spirit.mark === "h" && spirit.energy === spirit.energy_capacity) {
-      spirit.set_mark("c")
+    if (spirit.mark === 'h' && spirit.energy === spirit.energy_capacity) {
+      spirit.set_mark('c')
     }
 
-    if (spirit.mark === "h") {
+    if (spirit.mark === 'h') {
       const position = getStepPosition(star.position, 1, supplyGroups.length)
 
       moveTo(spirit, position)
@@ -184,15 +214,14 @@ function harvesterColonyWork (star, supplyGroups) {
         spirit.energize(spirit)
       } else {
         spirit.shout('💍')
-        spirit.set_mark("c")
+        spirit.set_mark('c')
       }
     }
-    if (spirit.mark === "c" && spirit.energy >= spirit.energy_capacity * 0.8) {
+    if (spirit.mark === 'c' && spirit.energy >= spirit.energy_capacity * 0.8) {
       const targetNode = findTargetNode(supplyGroups, 1, Math.floor(harvesterId / 2))
       energizeMove(spirit, targetNode.position)
       spirit.energize(targetNode)
     }
-
   }
 
   // SECTION: Handle supply nodes
@@ -225,23 +254,19 @@ function findTargetNode (supplyGroups, groupId, nodeIndex) {
 }
 
 function harvesterWork () {
+  assignUnemployedHarvesters()
   Object.keys(memory.harvester).forEach(starName => {
     harvesterColonyWork(memory.stars[starName], memory.harvester[starName].groups)
   })
 }
 
 function assignGroup (starName, spiritName, group) {
-  if (memory.working[spiritName]) {
-    console.log('CANWORK', JSON.stringify(memory.canWork.map(spirit => spirit.id)))
-    console.log('WORKING', JSON.stringify(memory.working))
-    throw new Error('SHOULD NOT HAPPEN')
-  }
   memory.working[spiritName] = `${starName}/${group}`
 
   memory.harvester[starName].groups[group].push(spiritName)
 }
 
-function assignUnemployed () {
+function assignUnemployedHarvesters () {
   Object.keys(memory.harvester).forEach(starName => {
     const { workers, groups } = memory.harvester[starName]
 
@@ -249,7 +274,7 @@ function assignUnemployed () {
 
     for (const spiritName of unemployed) {
       if (starName === memory.ownStar) {
-          // Deploy from star to base
+        // Deploy from star to base
         if (groups[0].length < 2 || groups[0].length < groups[1].length * 2 || Math.min(groups.map(group => group.length)) * 2 === groups[0].length) {
           assignGroup(starName, spiritName, 0)
         } else {
@@ -278,16 +303,14 @@ function mergeNoobs () {
     const spirit = memory.aliveOwn[i]
     // spirit.shout(`${spirit.size + (memory.incomingMerge[spirit.id] || 0)} - ${memory.working[spirit.id]}`)
     const firstSmall = memory.aliveOwn.findIndex(spirit =>
-      (spirit.size + (memory.incomingMerge[spirit.id] || 0)) < Math.max(Math.cbrt(tick) / 1.5, 2)
-      && !memory.isMerging[spirit.id]
+      (spirit.size + (memory.incomingMerge[spirit.id] || 0)) < Math.max(Math.cbrt(tick) / 1.5, 2) &&
+      !memory.isMerging[spirit.id],
     )
 
     if (spirit.size !== 1) {
       continue
     }
-    if (spirit.energy > memory.keepEnergyOnSpawn) {
-      spirit.energize(base)
-    }
+
     if (memory.aliveOwn[firstSmall] && memory.aliveOwn[firstSmall].id !== spirit.id) {
       memory.incomingMerge[memory.aliveOwn[firstSmall].id] = (memory.incomingMerge[memory.aliveOwn[firstSmall].id] || 0) + 1
       memory.isMerging[spirit.id] = true
@@ -303,24 +326,12 @@ function help (spirit, amount) {
   memory.needsHelp[spirit.id] = amount
 }
 
-function allocateDefenders () {
-  const supplyChainSize = memory.harvester[memory.ownStar].groups[memory.harvester.star_p89.groups.length - 1].length
-
-  const canWork = memory.canWork.filter(worker => !memory.working[worker.id]).map(spirit => spirit.id)
-  while (memory.defenders[memory.ownBase].length < supplyChainSize && canWork.length) {
-    const defender = canWork.shift()
-    memory.defenders[memory.ownBase].push(defender)
-    memory.working[defender] = true
-  }
-}
-
 function defenderWork () {
-  for (const i of memory.defenders[memory.ownBase]) {
+  for (const i of memory.defender[memory.ownBase].workers) {
     const defender = spirits[i]
-    const definedPos = getStepPosition(getStepPosition(stars[memory.ownStar].position, 2, 3, star_p89), 4, 5)
+    const definedPos = getStepPosition(getStepPosition(memory.stars[memory.ownStar].position, 2, 3, star_p89), 4, 5)
     defender.shout(`🐘 ${definedPos.map(item => Math.floor(item)).join(',')}`)
 
-    
     moveTo(defender, definedPos)
     if (defender.energy < defender.energy_capacity) {
       help(defender, defender.energy_capacity - defender.energy)
@@ -341,13 +352,13 @@ function askForHelp () {
   }
 }
 
-function helpInRange() {
+function helpInRange () {
   for (let round = 0; round < 10; round++) {
     const needsHelp = Object.keys(memory.needsHelp)
     for (const helper of memory.aliveOwn.filter(spirit => undefined === memory.needsHelp[spirit.id])) {
       for (const helpedId of needsHelp) {
         const helped = spirits[helpedId]
-  
+
         if (getDistance(helper.position, helped.position) < 200 && memory.needsHelp[helpedId] > 0) {
           helper.energize(helped)
           memory.needsHelp[helpedId] -= helper.size
@@ -398,11 +409,11 @@ function storeEnemyPositions () {
 }
 
 // SECTION: Attack section
-function attack() {
+function attack () {
   if (!memory.hasSplit) {
     for (let i = 0; i < memory.aliveOwn.filter(spirit => spirit.size !== 1).length; i++) {
       const spirit = memory.aliveOwn.filter(spirit => spirit.size !== 1)[i]
-  
+
       spirit.divide()
     }
     memory.hasSplit = true
@@ -426,19 +437,12 @@ function attack() {
     for (let i = 0; i < memory.aliveOwn.length; i++) {
       const spirit = memory.aliveOwn[i]
 
-      function smartMove (pos) {
-        const distance = getDistance(spirit.position, pos)
-        if (distance > 150) {
-          spirit.move(pos)
-        }
-      }
       if (memory.mergeWith[spirit.id]) {
         spirit.move(spirits[memory.mergeWith[spirit.id]].position)
         spirit.merge(spirits[memory.mergeWith[spirit.id]])
         spirit.shout(`M ${spirit.id}`)
       } else {
-        
-        smartMove(star_p89.position)
+        smartMove(spirit, star_p89.position)
         spirit.energize(spirit)
       }
     }
@@ -469,26 +473,25 @@ function shouldAttack () {
   return totalOwnCapacity - totalEnemyCapacity > 500 || memory.hasSplit
 }
 
-function someLeftToMerge() {
+function someLeftToMerge () {
   return memory.aliveOwn.some(spirit => memory.mergeWith[spirit.id] && spirits[spirit.id].hp)
 }
 
-function hasFullEnergy() {
+function hasFullEnergy () {
   return !memory.aliveOwn.some(spirit => spirit.energy !== spirit.energy_capacity)
 }
 
-function getEnemiesInRange(spirit) {
+function getEnemiesInRange (spirit) {
   const inSight = spirit.sight.enemies.map(name => spirits[name])
 
   return inSight.filter(enemy => {
-    
     const distance = getDistance(spirit.position, enemy.position)
 
     return distance <= 200
   })
 }
 
-function attackInRange() {
+function attackInRange () {
   for (const spirit of memory.aliveOwn) {
     // spirit.shout(`${spirit.size + (memory.incomingMerge[spirit.id] || 0)}`)
     let hasAttacked = false
@@ -517,7 +520,7 @@ function attackInRange() {
 if (memory.harvester[memory.ownStar].workers.length < 4 || tick < 100 ||
   memory.harvester[memory.ownStar].workers.length < memory.harvester.star_p89.workers.length ||
   memory.harvester[memory.ownStar].workers.length % 4 !== 0) {
-    // console.log('ALLOCATING TO', memory.ownStar, memory.harvester[memory.ownStar].workers.length)
+  // console.log('ALLOCATING TO', memory.ownStar, memory.harvester[memory.ownStar].workers.length)
 } else if (memory.harvester.star_p89.workers.length % 4 !== 0 || memory.harvester.star_p89.workers.length < 12) {
   // console.log('ALLOCATING TO star_p89', memory.harvester.star_p89.workers.length)
 } else {
@@ -526,4 +529,4 @@ if (memory.harvester[memory.ownStar].workers.length < 4 || tick < 100 ||
 // console.log(`Energy: ${memory.ownEnergy}v${memory.enemyEnergy}`)
 // console.log(`Strength: ${memory.totalOwnCapacity}v${memory.totalEnemyCapacity}`)
 // console.log('HARVESTER:', JSON.stringify(memory.harvester, null, 2))
-// console.log('DEFENDERS:', JSON.stringify(memory.defenders, null, 2))
+// console.log('DEFENDERS:', JSON.stringify(memory.defender, null, 2))
