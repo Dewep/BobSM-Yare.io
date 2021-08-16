@@ -1,20 +1,22 @@
 (function () {
-  console.log('tick:' + tick)
+  console.log('tick:' + tick + '; x:' + memory.board_x + '; y:' + memory.board_y)
 
   const formationSlugs = [
     'breedingOwnStar',
-    'breedingP89Star',
+    // 'breedingP89Star',
     // 'defenderBase',
     // 'defenderOwnStar',
     // 'defenderP89Star',
-    'outpost',
+    // 'outpost',
     // 'baseAttack',
     // 'attackFromBehind',
-    'baiter',
+    // 'baiter',
+    // 'manual',
   ]
   const avoidArea =
     null
-    // [...star_p89.position, 800]
+    // [...outpost.position, 400]
+    // [...outpost.position, 600]
 
   const formationSlug = formationSlugs.join(',')
   const isTopSide = base.position[0] === 1600
@@ -55,10 +57,13 @@
       { id: 'attacker0', size: 3, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: getChainPosition(star_p89.position, 1, 3) }
     ],
     attackFromBehind: [
-      { id: 'attackerBehind0', size: 1, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: [myStar.position[0] - sideModifier * 20, sideModifier * 50 + myStar.position[1]], avoidArea: [...star_p89.position, 800] }
+      { id: 'attackerBehind0', size: 1, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: [myStar.position[0] - sideModifier * 20, sideModifier * 50 + myStar.position[1]], avoidArea: [...outpost.position, 900] }
     ],
     baiter: [
       { id: 'baiter0', size: 1, pos: enemy_base.position, type: 'baiter', energyPos: [myStar.position[0] - sideModifier * 20, sideModifier * 50 + myStar.position[1]] }
+    ],
+    manual: [
+      { id: 'manual0', size: 1, pos: enemy_base.position, type: 'manual' }
     ]
   }
 
@@ -160,6 +165,11 @@
           energize(spirit, enemy_base, false)
         }
       }
+    } else if (worker.type === 'manual') {
+      move(spirit, [memory.board_x, memory.board_y], 0, null)
+      if (spirit.sight.structures.filter(s => s.startsWith('star_')).length || spirit.sight.structures.includes(base.id)) {
+        energize(spirit, spirit, true)
+      }
     } else if (worker.type === 'baiter') {
       enemies.sort((a, b) => a.spirit.dist - b.spirit.dist)
       const baiterAvoidArea = enemies.length ? [...enemies[0].spirit.position, 350] : (worker.avoidArea || avoidArea)
@@ -179,7 +189,7 @@
     }
 
     enemies.filter(e => e.dist <= 200)
-    if (enemies.length) {
+    if (enemies.length && spirit.energy_rate > 0.1) {
       energize(spirit, enemies[0].spirit, false)
     }
   }
@@ -211,6 +221,13 @@ function move (spirit, to, areaRandom = 0, avoidArea) {
 }
 
 function getSafePointAround(obj, r, from, to) {
+  if (!checkcirclelinecollide(obj[0], obj[1], r, from[0], from[1], to[0], to[1])) {
+    return to
+  }
+  // if ( (from[0] - obj[0])*(from[0] - obj[0]) + (from[1] - obj[1])*(from[1] - obj[1]) < r*r) {
+  //   return to
+  // }
+
   r += r * 0.1
   xA = obj[0]; yA = obj[1]
   xB = from[0]; yB = from[1]
@@ -220,11 +237,6 @@ function getSafePointAround(obj, r, from, to) {
   const b = 2 * (yB - yA)
   const c = (xB - xA) * (xB - xA) + (yB - yA) * (yB - yA) - R*R + r*r
   const delta = (2*a*c)*(2*a*c) - 4 *(a*a + b*b) * (c*c - (b*b*r*r))
-
-  // No hit, safe passage
-  if (delta < 0) {
-    return to
-  }
 
   const x1 = Math.round(xA + (2*a*c - Math.sqrt(delta)) / (2*(a*a+b*b)))
   const x2 = Math.round(xA + (2*a*c + Math.sqrt(delta)) / (2*(a*a+b*b)))
@@ -242,4 +254,24 @@ function getSafePointAround(obj, r, from, to) {
   if (dist(to, [x1, y1]) < dist(to, [x2, y2]))
     return [x1, y1]
   return [x2, y2]
+}
+
+function checkcirclelinecollide (x, y, radius, x1, y1, x2, y2) {
+  let A1 = (y2 - y1);
+  let B1 = (x1 - x2);
+  let C1 = (y2 - y1) * x1 + (x1 - x2) * y1;
+  let C3 = -B1 * x + A1 * y;
+  let det2 = (A1 * A1 - -B1 * B1);
+  let cx2 = 0;
+  let cy2 = 0;
+  if (det2 != 0) {
+    cx2 = (A1 * C1 - B1 * C3) / det2;
+    cy2 = (A1 * C3 - (-B1 * C1)) / det2;
+  }
+  if (Math.min(x1, x2) <= cx2 && cx2 <= Math.max(x1, x2) && Math.min(y1, y2) <= cy2 && cy2 <= Math.max(y1, y2)) {
+    if (Math.abs((cx2 - x) * (cx2 - x) + (cy2 - y) * (cy2 - y)) < radius * radius + 1) { // line has thickness
+      return true; // the second you find a collision, report it
+    }
+  }
+  return false;
 }
