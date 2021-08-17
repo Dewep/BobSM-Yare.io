@@ -7,7 +7,7 @@
     // 'defenderBase',
     // 'defenderOwnStar',
     // 'defenderP89Star',
-    // 'outpost',
+    'outpost',
     // 'baseAttack',
     // 'attackFromBehind',
     // 'baiter',
@@ -17,6 +17,13 @@
     null
     // [...outpost.position, 400]
     // [...outpost.position, 600]
+  const maxDistanceFromEnnemies =
+    // null
+    185
+  const areaRandom =
+    // 0
+    5
+    // 10
 
   const formationSlug = formationSlugs.join(',')
   const isTopSide = base.position[0] === 1600
@@ -51,7 +58,7 @@
     ],
     outpost: [
       { id: 'outpost0', size: 1, pos: outpost.position, type: 'attacker', attack: 'outpost', energyPos: getChainPosition(star_p89.position, 1, 3) },
-      { id: 'outpost1', size: 1, pos: outpost.position, type: 'attacker', attack: 'outpost', energyPos: getChainPosition(myStar.position, 1, 3) },
+      // { id: 'outpost1', size: 1, pos: outpost.position, type: 'attacker', attack: 'outpost', energyPos: getChainPosition(myStar.position, 1, 3) },
     ],
     baseAttack: [
       { id: 'attacker0', size: 3, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: getChainPosition(star_p89.position, 1, 3) }
@@ -123,7 +130,7 @@
     spirit.shout(workerId)
     const worker = formation.find(f => f.id === workerId)
 
-    const enemies = spirit.sight.enemies.map(id => ({ spirit: spirits[id], dist: dist(spirits[id].position, spirit.position) })).filter(e => e.spirit.energy >= 0)
+    let enemies = spirit.sight.enemies.map(id => ({ spirit: spirits[id], dist: dist(spirits[id].position, spirit.position) })).filter(e => e.spirit.energy >= 0)
     enemies.sort((a, b) => a.spirit.energy - b.spirit.energy)
 
     if (worker.type === 'chain') {
@@ -143,22 +150,22 @@
           energize(spirit, spirit, true)
         }
       }
-      move(spirit, worker.pos, 10, worker.avoidArea || avoidArea)
+      move(spirit, worker.pos, areaRandom, worker.avoidArea || avoidArea)
     } else if (worker.type === 'defender') {
-      move(spirit, worker.pos, 10, worker.avoidArea || avoidArea)
+      move(spirit, worker.pos, areaRandom, worker.avoidArea || avoidArea)
     } else if (worker.type === 'attacker') {
-      if (spirit.energy_rate < 0.3) {
+      if (spirit.energy_rate < 0.4) {
         spirit.set_mark('reload')
       } else if (spirit.energy_rate === 1) {
         spirit.set_mark('full')
       }
       if (spirit.mark === 'reload') {
-        move(spirit, worker.energyPos, 10, worker.avoidArea || avoidArea)
+        move(spirit, worker.energyPos, areaRandom, worker.avoidArea || avoidArea)
         if (spirit.sight.structures.filter(s => s.startsWith('star_')).length || spirit.sight.structures.includes(base.id)) {
           energize(spirit, spirit, true)
         }
       } else {
-        move(spirit, worker.pos, 10, worker.avoidArea || avoidArea)
+        move(spirit, worker.pos, areaRandom, worker.avoidArea || avoidArea)
         if (worker.attack === 'outpost') {
           energize(spirit, outpost, false)
         } else {
@@ -173,21 +180,21 @@
         energize(spirit, enemy_base, false)
       }
     } else if (worker.type === 'baiter') {
-      const enemiesBaiter = enemies.filter(e => e.dist < 300)
-      enemiesBaiter.sort((a, b) => a.dist - b.dist)
-      const baiterAvoidArea = enemiesBaiter.length ? [...enemiesBaiter[0].spirit.position, 220] : (worker.avoidArea || avoidArea)
-      if (spirit.energy_rate < 0.3) {
+      enemies = enemies.filter(e => e.dist < 300)
+      enemies.sort((a, b) => a.dist - b.dist)
+      const baiterAvoidArea = enemies.length ? [...enemies[0].spirit.position, 220] : (worker.avoidArea || avoidArea)
+      if (spirit.energy_rate < 0.4) {
         spirit.set_mark('reload')
       } else if (spirit.energy_rate === 1) {
         spirit.set_mark('full')
       }
       if (spirit.mark === 'reload') {
-        move(spirit, worker.energyPos, 10, baiterAvoidArea)
+        move(spirit, worker.energyPos, areaRandom, baiterAvoidArea)
         if (spirit.sight.structures.filter(s => s.startsWith('star_')).length || spirit.sight.structures.includes(base.id)) {
           energize(spirit, spirit, true)
         }
       } else {
-        if (enemiesBaiter.length >= 5) {
+        if (enemies.length >= 5) {
           move(spirit, (isTopSide ? [3200, 0] : [0, 0]), 0, baiterAvoidArea)
         } else {
           move(spirit, aliveEnemies.length ? aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)].position : enemy_base.position, 0, baiterAvoidArea)
@@ -195,12 +202,35 @@
       }
     }
 
-    enemies.filter(e => e.dist <= 200)
-    if (enemies.length && spirit.energy_rate > 0.1) {
-      energize(spirit, enemies[0].spirit, false)
+    const enemiesToFire = enemies.filter(e => e.dist <= 200)
+    if (enemiesToFire.length && spirit.energy_rate > 0.1) {
+      energize(spirit, enemiesToFire[0].spirit, false)
+    }
+
+    if (maxDistanceFromEnnemies) {
+      enemies = enemies.filter(e => e.dist < maxDistanceFromEnnemies)
+      enemies.sort((a, b) => a.dist - b.dist)
+      if (enemies.length) {
+        const wantedDist = spirit.energy_rate > 0.1 && worker.type !== 'baiter' ? maxDistanceFromEnnemies : 250
+        const wantedPos = getInRangePosition(spirit.position, enemies[0].spirit.position, wantedDist)
+        move(spirit, wantedPos)
+      }
     }
   }
 })()
+
+function getInRangePosition(from, to, wantedDistance) {
+  const distance = dist(from, to)
+  const dDist = wantedDistance - distance
+  
+  let dx = to[0] - from[0]
+  let dy = to[1] - from[1]
+
+  return [
+      from[0] - dDist * dx / distance,
+      from[1] - dDist * dy / distance,
+  ]
+}
 
 function dist (a, b) {
   return Math.sqrt(Math.pow(a[0] - b[0], 2) + Math.pow(a[1] - b[1], 2))
@@ -219,7 +249,7 @@ function energize (from, to, friend = true) {
   to.energy_rate = to.energy / to.energy_capacity
 }
 
-function move (spirit, to, areaRandom = 0, avoidArea) {
+function move (spirit, to, areaRandom = 0, avoidArea = null) {
   let pos = [...to].map(val => val - areaRandom + Math.round(Math.random() * areaRandom * 2))
   if (avoidArea) {
     pos = getSafePointAround([avoidArea[0], avoidArea[1]], avoidArea[2], spirit.position, pos)
