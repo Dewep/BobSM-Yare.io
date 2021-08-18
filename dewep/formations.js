@@ -3,14 +3,15 @@
 
   const formationSlugs = [
     'breedingOwnStar',
+    // 'safeMidStarToBase',
+    // 'dangerMidStarToBase',
+    // 'dangerMidToEnemyStarToBase',
     // 'botSideMissingConnector',
     // 'baseToSafeMidStar',
     // 'dangerMidStar',
     // 'dangerMidToEnemyStar',
     // 'attackFromMidStar',
-    // 'safeMidStarToBase',
-    // 'dangerMidStarToBase',
-    // 'dangerMidToEnemyStarToBase',
+    // 'ownStarToTriangle',
     // 'triangleToBase',
     // 'triangleToOutpost',
     // 'triangleToMid',
@@ -18,9 +19,11 @@
     // 'defenderBase',
     // 'defenderOwnStar',
     // 'defenderP89Star',
+    // 'directOutpost',
     // 'outpost',
     // 'baseAttack',
-    // 'attackFromBehind',
+    // 'attackFromBehindFromStar',
+    // 'attackFromBehindFromMid',
     // 'baiter',
     // 'manual',
   ]
@@ -53,6 +56,24 @@
       { id: 'ownStar1', size: 2, pos: getChainPosition(base.position, myStar.position, 2, 3), type: 'chain', chain: ['ownStar2'] },
       { id: 'ownStar2', size: 2, pos: getChainPosition(base.position, myStar.position, 3, 3), type: 'chain', chain: ['missingConnector0', 'base'] },
     ],
+    safeMidStarToBase: [
+      { id: 'baseToSafeMidStar0', size: 1, pos: getChainPosition(mySafeMidStarPoint, base.position, 1, 3), type: 'chain', chain: ['base'] },
+      { id: 'baseToSafeMidStar1', size: 1, pos: getChainPosition(mySafeMidStarPoint, base.position, 2, 3), type: 'chain', chain: ['baseToSafeMidStar0'] },
+      { id: 'baseToSafeMidStar2', size: 1, pos: getChainPosition(mySafeMidStarPoint, base.position, 3, 3), type: 'chain', chain: ['baseToSafeMidStar1', 'star'] },
+      { id: 'baseToSafeMidStar3', size: 4, pos: mySafeMidStarPoint, type: 'chain', chain: ['baseToSafeMidStar2', 'dangerMidStar0', 'star'] },
+    ],
+    dangerMidStarToBase: [
+      { id: 'dangerMidStar0', size: 3, pos: getInRangePosition(star_p89.position, outpost.position, 410), type: 'chain', chain: ['baseToSafeMidStar3', 'attackFromMidStar0', 'star'] },
+      { id: 'dangerMidStar1', size: 3, pos: myDangerMidStarPoint, type: 'chain', chain: ['dangerMidStar0', 'attackFromMidStar0', 'star'] },
+    ],
+    dangerMidToEnemyStarToBase: [
+      { id: 'enemyStarToStar0', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 1, 6), type: 'chain', chain: ['dangerMidStar1'] },
+      { id: 'enemyStarToStar1', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 2, 6), type: 'chain', chain: ['enemyStarToStar0'] },
+      { id: 'enemyStarToStar2', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 3, 6), type: 'chain', chain: ['enemyStarToStar1'] },
+      { id: 'enemyStarToStar3', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 4, 6), type: 'chain', chain: ['enemyStarToStar2'] },
+      { id: 'enemyStarToStar4', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 5, 6), type: 'chain', chain: ['enemyStarToStar3'] },
+      { id: 'enemyStarToStar5', size: 2, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 6, 6), type: 'chain', chain: ['enemyStarToStar4', 'star'] },
+    ],
     botSideMissingConnector: [
       { id: 'missingConnector0', size: 1, pos: [base.position[0], base.position[1] - 55], type: 'chain', chain: ['baseToSafeMidStar0'] },
     ],
@@ -78,24 +99,6 @@
       { id: 'attackFromMidStar0', size: 2, pos: getChainPosition(enemy_base.position, myDangerMidStarPoint, 1, 3), type: 'chain', chain: ['attackFromMidStar1', 'star'] },
       { id: 'attackFromMidStar1', size: 2, pos: getChainPosition(enemy_base.position, myDangerMidStarPoint, 2, 3), type: 'chain', chain: ['attackFromMidStar2'] },
       { id: 'attackFromMidStar2', size: 4, pos: getChainPosition(enemy_base.position, myDangerMidStarPoint, 3, 3), type: 'attacker', attack: 'base' },
-    ],
-    safeMidStarToBase: [
-      { id: 'baseToSafeMidStar0', size: 1, pos: getChainPosition(mySafeMidStarPoint, base.position, 1, 3), type: 'chain', chain: ['base'] },
-      { id: 'baseToSafeMidStar1', size: 1, pos: getChainPosition(mySafeMidStarPoint, base.position, 2, 3), type: 'chain', chain: ['baseToSafeMidStar0'] },
-      { id: 'baseToSafeMidStar2', size: 1, pos: getChainPosition(mySafeMidStarPoint, base.position, 3, 3), type: 'chain', chain: ['baseToSafeMidStar1', 'star'] },
-      { id: 'baseToSafeMidStar3', size: 4, pos: mySafeMidStarPoint, type: 'chain', chain: ['baseToSafeMidStar2', 'dangerMidStar0', 'star'] },
-    ],
-    dangerMidStarToBase: [
-      { id: 'dangerMidStar0', size: 3, pos: getInRangePosition(star_p89.position, outpost.position, 410), type: 'chain', chain: ['baseToSafeMidStar3', 'attackFromMidStar0', 'star'] },
-      { id: 'dangerMidStar1', size: 3, pos: myDangerMidStarPoint, type: 'chain', chain: ['dangerMidStar0', 'attackFromMidStar0', 'star'] },
-    ],
-    dangerMidToEnemyStarToBase: [
-      { id: 'enemyStarToStar0', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 1, 6), type: 'chain', chain: ['dangerMidStar1'] },
-      { id: 'enemyStarToStar1', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 2, 6), type: 'chain', chain: ['enemyStarToStar0'] },
-      { id: 'enemyStarToStar2', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 3, 6), type: 'chain', chain: ['enemyStarToStar1'] },
-      { id: 'enemyStarToStar3', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 4, 6), type: 'chain', chain: ['enemyStarToStar2'] },
-      { id: 'enemyStarToStar4', size: 1, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 5, 6), type: 'chain', chain: ['enemyStarToStar3'] },
-      { id: 'enemyStarToStar5', size: 2, pos: getChainPosition(enemyStar.position, myDangerMidStarPoint, 6, 6), type: 'chain', chain: ['enemyStarToStar4', 'star'] },
     ],
     ownStarToTriangle: [
       { id: 'ownStarToTriangle0', size: 2, pos: getChainPosition(trianglePoint, myStar.position, 1, 2), type: 'chain', chain: ['ownStarToTriangle1', 'star', 'base'] },
@@ -135,6 +138,9 @@
       { id: 'defenderP89Star1', size: 2, pos: getChainPosition(base.position, star_p89.position, 1, 3, [50, sideModifier * 50]), type: 'defender' },
       { id: 'defenderP89Star1', size: 2, pos: getChainPosition(base.position, star_p89.position, 1, 3, [50, sideModifier * -50]), type: 'defender' },
     ],
+    directOutpost: [
+      { id: 'directOutpost0', size: 2, pos: midMainPoint, type: 'attacker', attack: 'outpost', energyPos: midMainPoint }
+    ],
     outpostWithStar: [
       { id: 'outpost0', size: 1, pos: outpost.position, type: 'attacker', attack: 'outpost', energyPos: getChainPosition(base.position, star_p89.position, 1, 3) },
       // { id: 'outpost1', size: 1, pos: outpost.position, type: 'attacker', attack: 'outpost', energyPos: getChainPosition(base.position, myStar.position, 1, 3) },
@@ -146,7 +152,10 @@
     baseAttack: [
       { id: 'attacker0', size: 3, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: getChainPosition(base.position, star_p89.position, 1, 3) }
     ],
-    attackFromBehind: [
+    attackFromBehindFromMid: [
+      { id: 'attackerBehind0', size: 1, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: myDangerMidStarPoint, avoidArea: [...outpost.position, 410] }
+    ],
+    attackFromBehindFromStar: [
       { id: 'attackerBehind0', size: 1, pos: enemy_base.position, type: 'attacker', attack: 'base', energyPos: [myStar.position[0] - sideModifier * 20, sideModifier * 50 + myStar.position[1]], avoidArea: [...outpost.position, 700] }
     ],
     baiter: [
