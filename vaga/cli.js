@@ -13,21 +13,17 @@ const esbuildConfig = {
   target: "es2015",
 }
 
-const username = '...'
-const password = '...'
-
-async function build() {
+async function build(account) {
     esbuild.buildSync(esbuildConfig)
     console.log('bundled...')
 
-    const account = await sync.login(username, password);
-    if (!account) {
-        return console.error("login failed.");
+    const games = await sync.getGames(username);
+    if (games.length === 0) {
+        console.log('no retrieved game...')
+        return
     }
 
-    const games = await sync.getGames(username);
     console.log('retrieved games: ' + games.map(game => game.id).join(', ') + '...')
-
     const code = fs.readFileSync(esbuildConfig.outfile, 'utf-8');
     const done = await sync.sendCode(code, games, account)
     if (done) {
@@ -35,15 +31,22 @@ async function build() {
     }
 }
 
+const username = '...'
+const password = '...'
+
 async function main() {
-    const action = 
-    await build()
+    const account = await sync.login(username, password);
+    if (!account) {
+        return console.error("login failed.");
+    }
+
+    await build(account)
     watch(
         path.dirname(esbuildConfig.entryPoints[0]),
         { recrusive: true },
         (_, file) => {
-            console.log('node-watch: change detected: ' + file)
-            build().then(
+            console.log('file change detected: ' + file)
+            build(account).then(
                 () => console.log('Done.'),
                 (e) => console.error(e),
             )
